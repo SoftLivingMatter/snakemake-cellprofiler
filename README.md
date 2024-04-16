@@ -66,3 +66,8 @@ with `reportseff` in the `logs/slurm` output directory.
 
 **IMPORTANT** If you change the batch_size, you should delete the output files from
 your test run!
+
+To run the entire analysis, run `snakemake --profile cluster`.  If some jobs
+fail, you can increase the runtime or memory and restart.  As long as the
+batch size isn't changed, no files will be recreated.  It's a good idea to
+run in a tmux session!
