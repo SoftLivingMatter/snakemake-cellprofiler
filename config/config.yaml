@@ -1,0 +1,41 @@
+workdir: "/scratch/gpfs/tcomi/cp_morphology"
+
+paths:
+  config: "logs/config_{date}.yaml"
+  slurm_output: "logs/slurm"
+
+  batch_inputs: "{pipeline}/{image_set}/inputs/batch_{batch}.txt"
+  batch_outputs: "{pipeline}/{image_set}/temp_outputs/batch_{batch}"
+  final_outputs: "{pipeline}/{image_set}/outputs"
+
+pipelines:
+  defaults:
+    batch_size: 4  # images per job
+    runtime: 63  # in minutes, keep >= 63
+    mem_mb: 8000  # in MB
+  morphology:  # name replaces {pipeline} above
+    pipeline_file: nucleolar_morphology.cppipe
+    input_images:
+      # name replaces {image_set}.  Location should have a {sample} wildcard
+      TCOF:
+        files: /scratch/gpfs/tcomi/lifei_images/paper/TCOF/{sample}.nd2
+        batch_size: 30
+      RPL5:
+        batch_size: 30
+        mem_mb: 16000  # in MB
+        files: /scratch/gpfs/tcomi/lifei_images/paper/RPL5/{sample}.nd2
+      U3U8:
+        mem_mb: 24000  # in MB
+        runtime: 120  # in minutes, keep >= 63
+        files: /scratch/gpfs/tcomi/lifei_images/paper/U3U8/{sample}.nd2
+      CX:
+        batch_size: 30
+        mem_mb: 16000  # in MB
+        files: /scratch/gpfs/tcomi/lifei_images/paper/CX/{sample}.nd2
+  morphology_nodfc:  # name replaces {pipeline} above
+    pipeline_file: nucleolar_morphology_nodfc.cppipe
+    input_images:
+      # name replaces {image_set}.  Location should have a {sample} wildcard
+      FVP:
+        mem_mb: 16000  # in MB
+        files: /scratch/gpfs/tcomi/lifei_images/paper/FVP_nodfc{sample}.nd2

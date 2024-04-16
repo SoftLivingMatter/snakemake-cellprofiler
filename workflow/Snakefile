@@ -1,0 +1,154 @@
+from datetime import datetime
+
+configfile: 'config/config.yaml'
+
+paths = config['paths']
+workdir: config['workdir']
+
+os.makedirs(paths['slurm_output'], exist_ok=True)
+
+localrules:
+    log_config,
+    split_image_set,
+    combine_batches,
+
+# read in filenames and make batches
+# dict[pipeline][image_set] = list_batch[list_samples[]]
+batch_lists = {}
+batch_size_default = config['pipelines']['defaults']['batch_size']
+for name, details in config['pipelines'].items():
+    if name == 'defaults':
+        continue
+    batch_lists[name] = {}
+    batch_size = details.get('batch_size', batch_size_default)
+    for image_set, set_details in details['input_images'].items():
+        samples = sorted(glob_wildcards(set_details['files']).sample)
+        batch_size = set_details.get('batch_size', batch_size)
+        batches = [
+                samples[start:min(start+batch_size, len(samples))]
+                for start in range(0, len(samples), batch_size)
+                ]
+        batch_lists[name][image_set] = batches
+
+rule all:
+    input:
+        expand(paths['config'], date=datetime.now().strftime('%Y.%m.%d')),
+        [paths['final_outputs'].format(pipeline=pipeline, image_set=image_set)
+         for pipeline, image_sets in batch_lists.items()
+         for image_set in image_sets.keys()]
+
+rule test_resources:
+    input:
+        [paths['batch_outputs'].format(pipeline=pipeline, image_set=image_set, batch=batch)
+         for pipeline, image_sets in batch_lists.items()
+         for image_set, batches in image_sets.items()
+         for batch in range(min(3, len(batches)))
+         ]
+
+rule log_config:
+    '''
+    Copy config and place in logs folder with the date run
+    '''
+    input:  # depend on final outputs so this is copied last
+        [paths['final_outputs'].format(pipeline=pipeline, image_set=image_set)
+         for pipeline, image_sets in batch_lists.items()
+         for image_set in image_sets.keys()]
+    output:
+        paths['config']
+    run:
+        import yaml
+        with open(output[0], 'w') as outfile:
+            yaml.dump(config, outfile, default_flow_style=False)
+
+def split_image_set_input(wildcards):
+    batch = int(wildcards.batch)
+    batches = batch_lists[wildcards.pipeline][wildcards.image_set]
+    if batch >= len(batches):
+        raise ValueError(f'Batch {batch} too large for {wildcards.pipeline} - {wildcards.image_set}')
+    filename = config['pipelines'][wildcards.pipeline]['input_images'][wildcards.image_set]['files']
+    return expand(filename, sample=batches[batch])
+
+rule split_image_set:
+    output:
+        paths['batch_inputs']
+    input:
+        split_image_set_input
+    run:
+        with open(output[0], 'w') as outfile:
+            outfile.write('\n'.join(input))
+
+def get_or_default(key, pipeline, image_set):
+    return config['pipelines'][pipeline]['input_images'][image_set].get(
+            key,
+            config['pipelines'][pipeline].get(
+                key,
+                config['pipelines']['defaults'][key]
+                )
+            )
+
+def make_cp_rule(pipeline, image_set):
+    '''Make this a function so each pipeline has a different rule name.'''
+    rule:
+        name:
+            f'cp_{pipeline}_{image_set}'
+        input:
+            pipeline=config['pipelines'][pipeline]['pipeline_file'],
+            file_list=expand(paths['batch_inputs'],
+                             pipeline=pipeline,
+                             image_set=image_set,
+                             allow_missing=True),
+        output:
+            directory(expand(paths['batch_outputs'],
+                             pipeline=pipeline,
+                             image_set=image_set,
+                             allow_missing=True,
+                             )),
+        conda:
+            'envs/cellprofiler.yaml'
+        threads: 1
+        resources:
+            mem_mb=get_or_default('mem_mb', pipeline, image_set),
+            runtime=get_or_default('runtime', pipeline, image_set),
+        shell:
+            'mkdir -p {output[0]}\n'
+            'cellprofiler '
+                '--run-headless '
+                '--run '
+                '--conserve-memory=True '
+                '-p {input.pipeline} '
+                '--file-list {input.file_list} '
+                '-o {output[0]} '
+
+for pipeline, image_sets in batch_lists.items():
+    for image_set in image_sets.keys():
+        make_cp_rule(pipeline, image_set)
+
+def combine_batches_input(wildcards):
+    return expand(
+            paths['batch_outputs'],
+            pipeline=wildcards.pipeline,
+            image_set=wildcards.image_set,
+            batch=range(len(batch_lists[wildcards.pipeline][wildcards.image_set])),
+            )
+
+rule combine_batches:
+    input: combine_batches_input
+    output: directory(paths['final_outputs'])
+    run:
+        from pathlib import Path
+        import pandas as pd
+        outdir = Path(output[0])
+        outdir.mkdir(parents=True, exist_ok=True)
+        for file in Path(input[0]).glob('*.csv'):
+            dat = pd.read_csv(file)
+            file = file.name
+            dat.to_csv(outdir / file, index=False)
+
+            if file == 'Experiment.csv':
+                continue
+
+            for indir in input[1:]:
+                last_image_number = dat['ImageNumber'].iloc[-1]
+                dat = pd.read_csv(Path(indir) / file)
+                dat['ImageNumber'] += last_image_number
+                dat.to_csv(outdir / file, index=False, header=False, mode='a')

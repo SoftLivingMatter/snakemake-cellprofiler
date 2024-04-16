@@ -1,0 +1,13 @@
+---
+# basic configuration
+use-singularity: true
+use-conda: true
+printshellcmds: true
+
+# these control where the images are stored.  If you have a central location
+# you don't have to remake images when changing working directory
+# Alternatively you can set the shadow-prefix for the entire .snakemake dir
+singularity-prefix: "~/snakemake_images"
+conda-prefix: "~/snakemake_images"
+
+cores: 10
