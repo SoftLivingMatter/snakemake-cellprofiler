@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 
 configfile: 'config/config.yaml'
 
@@ -15,19 +16,34 @@ localrules:
 # read in filenames and make batches
 # dict[pipeline][image_set] = list_batch[list_samples[]]
 batch_lists = {}
-batch_size_default = config['pipelines']['defaults']['batch_size']
+max_batch_size_default = config['pipelines']['defaults']['max_batch_size']
 for name, details in config['pipelines'].items():
     if name == 'defaults':
         continue
     batch_lists[name] = {}
-    batch_size = details.get('batch_size', batch_size_default)
+    max_batch_size = details.get('max_batch_size', max_batch_size_default)
     for image_set, set_details in details['input_images'].items():
-        samples = sorted(glob_wildcards(set_details['files']).sample)
-        batch_size = set_details.get('batch_size', batch_size)
-        batches = [
-                samples[start:min(start+batch_size, len(samples))]
-                for start in range(0, len(samples), batch_size)
-                ]
+        # get samples sorted by filesize, largest to smallest
+        samples = sorted(
+                [(
+                    sample,
+                    Path(set_details['files'].format(sample=sample)).stat().st_size / 1024**3,
+                    )
+                for sample in glob_wildcards(set_details['files']).sample
+                 ], key=lambda x: (-x[1], x[0]))
+        max_batch_size = set_details.get('max_batch_size', max_batch_size)
+        batches= []
+        for sample, size in samples:
+            for batch in batches:
+                if batch[1] + size < max_batch_size:
+                    batch[0].append(sample)
+                    batch[1] += size
+                    break
+            else:
+                batches.append([[sample], size])
+
+        # strip off total batch sizes
+        batches = [batch[0] for batch in batches]
         batch_lists[name][image_set] = batches
 
 rule all:
@@ -104,11 +120,13 @@ def make_cp_rule(pipeline, image_set):
                              allow_missing=True,
                              )),
         conda:
-            'envs/cellprofiler.yaml'
+            config.get('cp_env', 'envs/cellprofiler.yaml')
         threads: 1
         resources:
             mem_mb=get_or_default('mem_mb', pipeline, image_set),
             runtime=get_or_default('runtime', pipeline, image_set),
+        params:
+            extras=f"--plugins-directory {config['cp_plugin_dir']}" if 'cp_plugin_dir' in config else ""
         shell:
             'mkdir -p {output[0]}\n'
             'cellprofiler '
