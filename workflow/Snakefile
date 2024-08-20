@@ -17,19 +17,23 @@ localrules:
 # dict[pipeline][image_set] = list_batch[list_samples[]]
 batch_lists = {}
 max_batch_size_default = config['pipelines']['defaults']['max_batch_size']
+recursive_default = config['pipelines']['defaults']['recursive_images']
 for name, details in config['pipelines'].items():
     if name == 'defaults':
         continue
     batch_lists[name] = {}
     max_batch_size = details.get('max_batch_size', max_batch_size_default)
+    recursive = details.get('recursive_images', recursive_default)
     for image_set, set_details in details['input_images'].items():
         # get samples sorted by filesize, largest to smallest
+        recursive = set_details.get('recursive_images', recursive)
         samples = sorted(
                 [(
                     sample,
                     Path(set_details['files'].format(sample=sample)).stat().st_size / 1024**3,
                     )
                 for sample in glob_wildcards(set_details['files']).sample
+                 if recursive or '/' not in sample
                  ], key=lambda x: (-x[1], x[0]))
         max_batch_size = set_details.get('max_batch_size', max_batch_size)
         batches= []
@@ -126,7 +130,8 @@ def make_cp_rule(pipeline, image_set):
             mem_mb=get_or_default('mem_mb', pipeline, image_set),
             runtime=get_or_default('runtime', pipeline, image_set),
         params:
-            extras=f"--plugins-directory {config['cp_plugin_dir']}" if 'cp_plugin_dir' in config else ""
+            extras=f"--plugins-directory {config['cp_plugin_dir']}" if 'cp_plugin_dir' in config else "",
+            always_continue = "--always-continue " if get_or_default('continue_on_error', pipeline, image_set) else "",
         shell:
             'mkdir -p {output[0]}\n'
             'cellprofiler '
@@ -136,6 +141,8 @@ def make_cp_rule(pipeline, image_set):
                 '-p {input.pipeline} '
                 '--file-list {input.file_list} '
                 '-o {output[0]} '
+                '{params.always_continue} '
+                '{params.extras}'
 
 for pipeline, image_sets in batch_lists.items():
     for image_set in image_sets.keys():
@@ -165,8 +172,13 @@ rule combine_batches:
             if file == 'Experiment.csv':
                 continue
 
-            for indir in input[1:]:
+            last_image_number = 0
+            if len(dat) > 0:
                 last_image_number = dat['ImageNumber'].iloc[-1]
+
+            for indir in input[1:]:
                 dat = pd.read_csv(Path(indir) / file)
-                dat['ImageNumber'] += last_image_number
-                dat.to_csv(outdir / file, index=False, header=False, mode='a')
+                if len(dat) > 0:
+                    dat['ImageNumber'] += last_image_number
+                    last_image_number = dat['ImageNumber'].iloc[-1]
+                    dat.to_csv(outdir / file, index=False, header=False, mode='a')

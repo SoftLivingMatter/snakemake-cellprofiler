@@ -1,6 +1,10 @@
-workdir: "/scratch/gpfs/tcomi/cp_morphology_FC_redo"
-# cp_env: ""  # set to a local cp installation if you need extra dependencies
-# cp_plugin_dir: ""  # set to plugin directory
+workdir: "/path/to/output/directory"
+# set to a local cp installation if you need extra dependencies
+# if unset, will use cellprofiler 4.2.6
+cp_env: "cellprofiler"
+# set to plugin directory
+# if unset, will not include additional plugins
+cp_plugin_dir: "/path/to/cellprofiler_plugins/"
 
 paths:
   config: "logs/config_{date}.yaml"
@@ -12,26 +16,22 @@ paths:
 
 pipelines:
   defaults:
-    max_batch_size: 2  # in GB
-    runtime: 120  # in minutes, keep >= 63
-    mem_mb: 16000  # in MB
+    max_batch_size: 0.75  # total image size for batches, in GB
+    # resources for cluster integration
+    runtime: 63  # in minutes, keep >= 63
+    mem_mb: 24000  # in MB
+    continue_on_error: False  # if true, will skip images with errors
+    recursive_images: False  # if true, include images in all subdirectories
+
   morphology:  # name replaces {pipeline} above
-    pipeline_file: nucleolar_morphology.cppipe
+    pipeline_file: /path/to/pipeline.cppipe
+    max_batch_size: 1  # can overwrite defaults at the pipeline level
     input_images:
-      # name replaces {image_set}.  Location should have a {sample} wildcard
-      TCOF:
-        files: /scratch/gpfs/tcomi/lifei_images/paper/TCOF/{sample}.nd2
-      RPL5:
-        mem_mb: 32000  # in MB
-        files: /scratch/gpfs/tcomi/lifei_images/paper/RPL5/{sample}.nd2
-      U3U8:
-        mem_mb: 32000  # in MB
-        files: /scratch/gpfs/tcomi/lifei_images/paper/U3U8/{sample}.nd2
-      CX:
-        files: /scratch/gpfs/tcomi/lifei_images/paper/CX/{sample}.nd2
-  morphology_nodfc:  # name replaces {pipeline} above
-    pipeline_file: nucleolar_morphology_nodfc.cppipe
-    input_images:
-      # name replaces {image_set}.  Location should have a {sample} wildcard
-      FVP:
-        files: /scratch/gpfs/tcomi/lifei_images/paper/FVP_nodfc/{sample}.nd2
+      CX:  # name replaces {image_set} above
+        runtime: 120  # can overwrite defaults at the sample level
+        continue_on_error: True
+        files: /path/to/images/{sample}.nd2
+      Fib:  # use the same pipeline for multiple files
+        files: /path/to/more_images/{sample}Denoised.nd2
+        #                                   ^only match files ending in Denoised
+        # {sample} is only a placeholder
