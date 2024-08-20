@@ -14,7 +14,13 @@ mamba create -c conda-forge -c bioconda -n snake snakemake=7.32.4
 
 Now you are ready to configure your run.  Fill out the following in `config/config.yaml`
 ```yaml
-workdir: "/PATH/TO/OUTPUT"
+workdir: "/path/to/output/directory"
+# set to a local cp installation if you need extra dependencies
+# if unset, will use cellprofiler 4.2.6
+cp_env: "cellprofiler"
+# set to plugin directory
+# if unset, will not include additional plugins
+cp_plugin_dir: "/path/to/cellprofiler_plugins/"
 
 # these can be left alone.  If you change, be sure to include the same wildcards
 paths:
@@ -29,13 +35,16 @@ paths:
 pipelines:
   # these are the default resources for all jobs.  Can override below
   defaults:
-    batch_size: 4  # images per job
+    max_batch_size: 0.75  # total image size for batches, in GB
+    # resources for cluster integration
     runtime: 63  # in minutes, keep >= 63
-    mem_mb: 8000  # in MB
+    mem_mb: 24000  # in MB
+    continue_on_error: False  # if true, will skip images with errors
+    recursive_images: False  # if true, include images in all subdirectories
+
   morphology:  # name replaces {pipeline} above
     pipeline_file: nucleolar_morphology.cppipe  # this is relative to the working directory
     mem_mb: 4000  # this overrides default memory for all image sets in this pipeline
-    batch_size: 30
     input_images:
       # name replaces {image_set}.  Location should have a {sample} wildcard
       set1:
@@ -56,7 +65,7 @@ pipelines:
         files: /scratch/gpfs/{sample}.nd2
 ```
 
-To test the resources you guessed, run
+To test the resources you estimated, run
 ```bash
 conda activate snake
 snakemake --profile cluster test_resources
