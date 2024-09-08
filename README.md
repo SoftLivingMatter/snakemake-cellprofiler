@@ -1,6 +1,14 @@
 # snakemake-cellprofiler
 
-A thin wrapper around cellprofiler to simplify running pipelines on della.
+A thin wrapper around cellprofiler to simplify deploying pipelines on HPC systems.
+Cellprofiler solves the problem of reproducible image analysis pipelines, but
+when scaling to hundreds of images on slurm systems, additional work is required.
+Snakemake is a workflow management system that can dynamically create rules
+with specified resources.  Together they can make running pipelines as easy as
+changing a few config variables.
+
+The workflow is intended for user with cellprofiler pipelines, lots of data,
+and some HPC experience.
 
 ## Usage
 
@@ -50,7 +58,7 @@ pipelines:
       set1:
         files: /scratch/gpfs/and/remember/{sample}.nd2
       set2:
-        mem_mb: 16000  # in MB
+        mem_mb: 16000  # this overrides the 4000 above
         files: /scratch/gpfs/{sample}.nd2
       set3_or_another_name:
         mem_mb: 24000  # in MB
@@ -64,6 +72,9 @@ pipelines:
         mem_mb: 16000  # in MB
         files: /scratch/gpfs/{sample}.nd2
 ```
+
+As you can see, resources and pipeline settings can be set as defaults, per
+pipeline, or per same set.
 
 To test the resources you estimated, run
 ```bash
@@ -80,3 +91,17 @@ To run the entire analysis, run `snakemake --profile cluster`.  If some jobs
 fail, you can increase the runtime or memory and restart.  As long as the
 batch size isn't changed, no files will be recreated.  It's a good idea to
 run in a tmux session!
+
+## Additional details
+The workflow uses fairly basic snakemake features, with the most complex logic
+being in parsing the config and updating parameters in a cascading style.
+Image batches are dynamically created based on the maximum image size.  Briefly,
+images are sorted by size and added to a list of batches.  If adding an image to
+the batch would cause it to be larger than the maximum, the image is added to the
+next batch.  Snakemake rules are dynamically created with specified resources,
+pipelines, and a name composed from the pipeline and image set names.
+
+The workflow has only been tested on linux systems with a slurm resource manager.
+
+While feature complete, the code is under development and requests for new features
+will be considered.  Contributions are also welcome.
