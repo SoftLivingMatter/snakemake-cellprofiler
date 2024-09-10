@@ -19,6 +19,7 @@ Create a snakemake environment, using version 7
 ```bash
 mamba create -c conda-forge -c bioconda -n snake snakemake=7.32.4
 ```
+Installation should take a few minutes.
 
 Now you are ready to configure your run.  Fill out the following in `config/config.yaml`
 ```yaml
@@ -92,6 +93,9 @@ fail, you can increase the runtime or memory and restart.  As long as the
 batch size isn't changed, no files will be recreated.  It's a good idea to
 run in a tmux session!
 
+Outputs will be placed into `{pipeline}/{image_set}/outputs` where all batch
+outputs are combined into csvs.
+
 ## Additional details
 The workflow uses fairly basic snakemake features, with the most complex logic
 being in parsing the config and updating parameters in a cascading style.
@@ -102,6 +106,8 @@ next batch.  Snakemake rules are dynamically created with specified resources,
 pipelines, and a name composed from the pipeline and image set names.
 
 The workflow has only been tested on linux systems with a slurm resource manager.
+Runtimes vary based on pipeline complexity, number and size of images, and the
+resources available for execution.
 
 While feature complete, the code is under development and requests for new features
 will be considered.  Contributions are also welcome.
