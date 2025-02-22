@@ -1,4 +1,5 @@
 # snakemake-cellprofiler
+[![DOI](https://zenodo.org/badge/787425314.svg)](https://doi.org/10.5281/zenodo.14908469)
 
 A thin wrapper around cellprofiler to simplify deploying pipelines on HPC systems.
 Cellprofiler solves the problem of reproducible image analysis pipelines, but
